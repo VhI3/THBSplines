@@ -13,8 +13,10 @@ T = thb.HierarchicalSpace(knots, degrees, dimension)
 
 # Select cells to refine at each level, either by explicitly marking the elements, or by choosing a rectangular region.
 cells_to_refine = {}
-#cells_to_refine[0] = [0, 1, 2, 3, 4, 5, 6]
-cells_to_refine[0] = [0]
+
+
+cells_to_refine[0] = [0, 1, 2, 3, 4, 5, 6]
+#cells_to_refine[0] = [0]
 
 T = thb.refine(T, cells_to_refine)
 
