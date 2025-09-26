@@ -1,11 +1,30 @@
 # THBSplines
+
+## What are Truncated Hierarchical B-Splines?
+
+**Truncated Hierarchical B-Splines (THB-splines)** are an extension of classical **B-splines** that enable **local refinement** in isogeometric analysis (IGA) while maintaining important mathematical properties such as partition of unity, non-negativity, and linear independence.  
+
+- **B-splines** are piecewise polynomial functions commonly used in computer graphics and numerical analysis because they provide smooth and flexible representations of curves and surfaces.  
+- **Hierarchical B-splines (HB-splines)** allow local mesh refinement by organizing B-splines into levels of resolution, but they may introduce redundancy and lose partition of unity.  
+- **Truncated Hierarchical B-splines (THB-splines)** improve on this by introducing a **truncation mechanism**: basis functions from coarser levels are “trimmed” where finer-level functions are active.  
+
+This truncation ensures that:  
+1. The basis functions remain **linearly independent**.  
+2. The representation is **sparse and efficient**.  
+3. The method supports **adaptive refinement**, crucial for finite element methods and isogeometric analysis.  
+
+THB-splines are particularly useful in solving partial differential equations (PDEs) with **adaptive isogeometric methods**, where computational effort is concentrated in regions requiring higher accuracy (e.g., around singularities or sharp gradients).
+
+---
+
 ## Truncated Hierarchical B-Splines in Python
 
-This repository contains a dimension-independent Python-implementation of truncated hierarchical B-splines, and methods for the assembly of stiffness
-and mass matrices. The code is currently in a fairly undocumented state, and may contain bugs - so use at your own discretion.
+This repository contains a dimension-independent Python-implementation of truncated hierarchical B-splines, and methods for the assembly of stiffness and mass matrices.  
+⚠️ **Note:** This project is mainly for **debugging and learning purposes**. The code is still in a fairly undocumented state and may contain bugs — use at your own discretion.
 
-The implementation is based on the article [Algorithms for the implementation of adaptive isogeometric methods using hierarchical B-splines](https://doi.org/10.1016/j.apnum.2017.08.006),
-and is heavily influenced by the [GeoPDEs](http://rafavzqz.github.io/geopdes/) Matlab/Octave package for isogeometric analysis developed by the authors.
+The implementation is based on the article [Algorithms for the implementation of adaptive isogeometric methods using hierarchical B-splines](https://doi.org/10.1016/j.apnum.2017.08.006), and is heavily influenced by the [GeoPDEs](http://rafavzqz.github.io/geopdes/) Matlab/Octave package for isogeometric analysis developed by the authors.
+
+---
 
 ## Example - computing the mass and stiffness matrix
 
@@ -47,4 +66,4 @@ plt.show()
 ```
 
 ![](THBSplines/images/mass_matrix.png)
-# THBSplines
+
