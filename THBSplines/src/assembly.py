@@ -1,183 +1,305 @@
+"""
+Finite-element matrix assembly for THB-spline spaces.
+
+This module assembles the two fundamental matrices needed for Galerkin
+finite-element methods with THB-splines:
+
+  **Mass matrix**      M_{ij} = ∫_Ω Bᵢ(x) Bⱼ(x) dx
+  **Stiffness matrix** A_{ij} = ∫_Ω ∇Bᵢ(x) · ∇Bⱼ(x) dx
+
+Assembly strategy
+-----------------
+Because THB-splines live on a *hierarchical* mesh, the integration domain Ω
+is partitioned level by level:
+
+    Ω = ∪_ℓ Ω_ℓ   (disjoint union of active cells at each level)
+
+For each level ℓ we assemble a *local* matrix over the tensor-product space
+V_ℓ and then transform it to the global hierarchical DOF ordering via the
+subdivision matrix C[ℓ]:
+
+    M_global += C[ℓ]ᵀ · M_local[ℓ] · C[ℓ]
+
+Quadrature
+----------
+Gauss–Legendre quadrature with ``order`` points per direction is used.  If
+``order`` is not specified, an exact rule is chosen: ``degree + 1`` points
+suffice for the mass matrix (integrand degree ≤ 2p) and the stiffness matrix
+(integrand degree ≤ 2p−2).
+
+The reference rule on [-1, 1] is mapped to each physical cell by the affine
+map  x = 0.5·(ξ+1)·(b−a) + a  with Jacobian (b−a)/2 per direction.
+"""
+
+from __future__ import annotations
+
 import numpy as np
-import scipy.integrate
 import scipy.sparse as sp
-from THBSplines.lib.BSpline import integrate as cintegrate, integrate_grad as cintegrate_grad
 from tqdm import tqdm
 
+from THBSplines.src.b_spline_numpy import integrate, integrate_grad
 
-def hierarchical_mass_matrix(T, order=None, integration_region=None, mode='reduced'):
+
+# ---------------------------------------------------------------------------
+# High-level assemblers
+# ---------------------------------------------------------------------------
+
+def hierarchical_mass_matrix(
+    T,
+    order: int | None = None,
+    integration_region: np.ndarray | None = None,
+    mode: str = "reduced",
+) -> sp.lil_matrix:
+    """
+    Assemble the global hierarchical mass matrix.
+
+        M_{ij} = ∫_Ω Bᵢ(x) Bⱼ(x) dx
+
+    Parameters
+    ----------
+    T                  : HierarchicalSpace
+    order              : Gauss quadrature order (points per direction per cell).
+                         Defaults to ``degree + 1`` (exact for polynomials up to 2p).
+    integration_region : optional array of shape (d, 2).  If given, only cells
+                         inside this axis-aligned box are integrated.
+    mode               : ``'reduced'`` (faster) or ``'full'`` — passed to
+                         ``create_subdivision_matrix``.
+
+    Returns
+    -------
+    scipy.sparse.lil_matrix of shape (nfuncs, nfuncs)
+    """
+    return _assemble(T, order, integration_region, mode, matrix_type="mass")
+
+
+def hierarchical_stiffness_matrix(
+    T,
+    order: int | None = None,
+    integration_region: np.ndarray | None = None,
+    mode: str = "reduced",
+) -> sp.lil_matrix:
+    """
+    Assemble the global hierarchical stiffness matrix.
+
+        A_{ij} = ∫_Ω ∇Bᵢ(x) · ∇Bⱼ(x) dx
+
+    Parameters
+    ----------
+    T                  : HierarchicalSpace
+    order              : Gauss quadrature order.
+    integration_region : optional integration sub-domain.
+    mode               : subdivision matrix mode.
+
+    Returns
+    -------
+    scipy.sparse.lil_matrix of shape (nfuncs, nfuncs)
+    """
+    return _assemble(T, order, integration_region, mode, matrix_type="stiffness")
+
+
+def _assemble(T, order, integration_region, mode, matrix_type):
+    """
+    Shared assembly loop for both mass and stiffness matrices.
+
+    The algorithm accumulates contributions level by level:
+      for ℓ = 0, …, L-1:
+          M_global += C[ℓ]ᵀ @ M_local[ℓ] @ C[ℓ]
+    """
     mesh = T.mesh
+    n    = T.nfuncs
+    M    = sp.lil_matrix((n, n), dtype=np.float64)
 
-    n = T.nfuncs
-    M = sp.lil_matrix((n, n), dtype=np.float64)
+    C         = T.create_subdivision_matrix(mode)
+    ndofs_cum = 0  # cumulative DOF count up to and including current level
 
-    ndofs_u = 0
-    ndofs_v = 0
-    C = T.create_subdivision_matrix(mode)
     for level in range(mesh.nlevels):
-        if integration_region is None:
-            element_indices = None
+        ndofs_cum += T.nfuncs_level[level]
+
+        if mesh.nel_per_level[level] == 0:
+            continue  # no active cells at this level — skip
+
+        # Restrict integration to a sub-region if requested
+        elem_indices = (
+            T.refine_in_rectangle(integration_region, level)
+            if integration_region is not None
+            else None
+        )
+
+        # Assemble the level-local matrix
+        if matrix_type == "mass":
+            M_local = local_mass_matrix(T, level, order, elem_indices)
         else:
-            element_indices = T.refine_in_rectangle(integration_region, level)
+            M_local = local_stiffness_matrix(T, level, order, elem_indices)
 
-        ndofs_u += T.nfuncs_level[level]
-        ndofs_v += T.nfuncs_level[level]
-
-        if mesh.nel_per_level[level] > 0:
-            M_local = local_mass_matrix(T, level, order, element_indices= element_indices)
-
-            dofs_u = range(ndofs_u)
-            dofs_v = range(ndofs_v)
-
-            ix = np.ix_(dofs_u, dofs_v)
-            M[ix] += C[level].T @ M_local @ C[level]
+        # Add the global contribution via the subdivision matrix
+        dof_range = range(ndofs_cum)
+        ix        = np.ix_(dof_range, dof_range)
+        M[ix]    += C[level].T @ M_local @ C[level]
 
     return M
 
 
-def hierarchical_stiffness_matrix(T, order=None, integration_region = None, mode='reduced'):
-    mesh = T.mesh
+# ---------------------------------------------------------------------------
+# Level-local assemblers
+# ---------------------------------------------------------------------------
 
-    n = T.nfuncs
-    M = sp.lil_matrix((n, n), dtype=np.float64)
-
-    ndofs_u = 0
-    ndofs_v = 0
-    C = T.create_subdivision_matrix(mode)
-    for level in range(mesh.nlevels):
-        if integration_region is None:
-            element_indices = None
-        else:
-            element_indices = T.refine_in_rectangle(integration_region, level)
-        ndofs_u += T.nfuncs_level[level]
-        ndofs_v += T.nfuncs_level[level]
-
-        if mesh.nel_per_level[level] > 0:
-            M_local = local_stiffness_matrix(T, level, order, element_indices=element_indices)
-
-            dofs_u = range(ndofs_u)
-            dofs_v = range(ndofs_v)
-
-            ix = np.ix_(dofs_u, dofs_v)
-            M[ix] += C[level].T @ M_local @ C[level]
-
-    return M
-
-
-def translate_points(points, cell, weights):
+def local_mass_matrix(
+    T,
+    level: int,
+    order: int | None = None,
+    element_indices: np.ndarray | None = None,
+) -> sp.lil_matrix:
     """
-    Translates the gauss-quadrature points to the cell
-    :param points:
-    :param cell:
-    :return:
-    """
-    n = len(points)
-    dim = cell.shape[0]
-    quad_points = np.zeros((dim, n))
-    quad_weights = np.zeros((dim, n))
-    quad_weights[:] = weights
+    Assemble the mass matrix for the tensor-product space at ``level``.
 
-    for i in range(dim):
-        for j in range(n):
-            quad_points[i, j] = 0.5 * (points[j] + 1) * (cell[i, 1] - cell[i, 0]) + cell[i, 0]
-    weights = np.prod(np.stack(np.meshgrid(*quad_weights), -1).reshape(-1, dim), axis=1)
-    points = np.stack(np.meshgrid(*quad_points), -1).reshape(-1, dim)
-    area_cell = np.prod(np.diff(cell[:]))
+        M^ℓ_{ij} = ∫_{Ω_ℓ} Bᵢ(x) Bⱼ(x) dx
 
-    return points, weights, area_cell
+    Only the active cells at this level are integrated.
 
+    Parameters
+    ----------
+    T               : HierarchicalSpace
+    level           : refinement level
+    order           : Gauss quadrature order (default: ``degree + 1``)
+    element_indices : restrict integration to this subset of cells.
+                      If None, all active cells at this level are used.
 
-def local_mass_matrix(T, level, order=None, element_indices=None):
-    """
-    Computes the mass matrix on a given level
-    :param T: HierarchicalSpace object
-    :param level: hierarchical level
-    :param order: integration order
-    :param element_indices: elements to integrate over. If None, all elements on this level will be integrated over.
-    :return:
+    Returns
+    -------
+    scipy.sparse.lil_matrix of shape (nfuncs_level, nfuncs_level)
     """
     if element_indices is None:
-        element_indices = range(T.mesh.meshes[level].nelems)
-    active_cells_i = np.intersect1d(T.mesh.aelem_level[level], element_indices)
-    active_cells = T.mesh.meshes[level].cells[active_cells_i]
-    ndofs_u = T.spaces[level].nfuncs
-    ndofs_v = T.spaces[level].nfuncs
+        element_indices = np.arange(T.mesh.meshes[level].nelems, dtype=np.int64)
 
-    M = sp.lil_matrix((ndofs_u, ndofs_v), dtype=np.float64)
+    active_cells = np.intersect1d(T.mesh.aelem_level[level], element_indices)
+    cells        = T.mesh.meshes[level].cells[active_cells]
+    n            = T.spaces[level].nfuncs
+    M            = sp.lil_matrix((n, n), dtype=np.float64)
 
     if order is None:
-        order = T.spaces[level].degrees[0] + 1
+        order = int(T.spaces[level].degrees[0]) + 1
 
-    points, weights = np.polynomial.legendre.leggauss(order)
+    pts_ref, wts_ref = np.polynomial.legendre.leggauss(order)
 
-    for cell in tqdm(active_cells, desc=f"level = {level}"):
-        qp, qw, area = translate_points(points, cell, weights)
-        dim = qp.shape[1]
-        active_basis_functions = T.spaces[level].get_functions_on_rectangle(cell)
-        for glob_ind_i, i in enumerate(active_basis_functions):
-            bi = T.spaces[level].construct_B_spline(i)
-            bi_values = bi(qp)
-            for glob_ind_j, j in enumerate(active_basis_functions[glob_ind_i:]):
-                bj = T.spaces[level].construct_B_spline(j)
-                bj_values = bj(qp)
-                val = cintegrate(bi_values, bj_values, qw, area, dim)
+    for cell in tqdm(cells, desc=f"Mass matrix  level={level}"):
+        qp, qw, area = _translate_points(pts_ref, cell, wts_ref)
+        active_bf    = T.spaces[level].get_functions_on_rectangle(cell)
+
+        # Only the upper triangle is computed; symmetry fills the lower half
+        for idx_i, i in enumerate(active_bf):
+            Bi     = T.spaces[level].construct_B_spline(i)
+            bi_val = Bi(qp)
+
+            for j in active_bf[idx_i:]:
+                Bj     = T.spaces[level].construct_B_spline(j)
+                bj_val = Bj(qp)
+                val    = integrate(bi_val, bj_val, qw, area, cell.shape[0])
                 M[i, j] += val
-                if i == j:
-                    continue
-                M[j, i] += val
+                if i != j:
+                    M[j, i] += val
 
     return M
 
 
-def local_stiffness_matrix(T, level, order=None, element_indices=None):
+def local_stiffness_matrix(
+    T,
+    level: int,
+    order: int | None = None,
+    element_indices: np.ndarray | None = None,
+) -> sp.lil_matrix:
+    """
+    Assemble the stiffness matrix for the tensor-product space at ``level``.
+
+        A^ℓ_{ij} = ∫_{Ω_ℓ} ∇Bᵢ(x) · ∇Bⱼ(x) dx
+
+    Parameters
+    ----------
+    T               : HierarchicalSpace
+    level           : refinement level
+    order           : Gauss quadrature order (default: ``degree + 1``)
+    element_indices : restrict to a subset of active cells.
+
+    Returns
+    -------
+    scipy.sparse.lil_matrix of shape (nfuncs_level, nfuncs_level)
+    """
     if element_indices is None:
-        element_indices = range(T.mesh.meshes[level].nelems)
-    active_cells_i = np.intersect1d(T.mesh.aelem_level[level], element_indices)
-    active_cells = T.mesh.meshes[level].cells[active_cells_i]
-    ndofs_u = T.spaces[level].nfuncs
-    ndofs_v = T.spaces[level].nfuncs
+        element_indices = np.arange(T.mesh.meshes[level].nelems, dtype=np.int64)
 
-    M = sp.lil_matrix((ndofs_u, ndofs_v), dtype=np.float64)
+    active_cells = np.intersect1d(T.mesh.aelem_level[level], element_indices)
+    cells        = T.mesh.meshes[level].cells[active_cells]
+    n            = T.spaces[level].nfuncs
+    M            = sp.lil_matrix((n, n), dtype=np.float64)
 
     if order is None:
-        order = T.spaces[level].degrees[0] + 1
+        order = int(T.spaces[level].degrees[0]) + 1
 
-    points, weights = np.polynomial.legendre.leggauss(order)
-    for cell in tqdm(active_cells, desc=f"level = {level}"):
-        qp, qw, area = translate_points(points, cell, weights)
-        dim = qp.shape[1]
-        active_basis_functions = T.spaces[level].get_functions_on_rectangle(cell)
-        for glob_ind_i, i in enumerate(active_basis_functions):
-            bi = T.spaces[level].construct_B_spline(i)
-            bi_values = bi.grad(qp)
-            for glob_ind_j, j in enumerate(active_basis_functions[glob_ind_i:]):
-                bj = T.spaces[level].construct_B_spline(j)
-                bj_values = bj.grad(qp)
-                val = cintegrate_grad(bi_values, bj_values, qw, area, dim)
+    pts_ref, wts_ref = np.polynomial.legendre.leggauss(order)
+
+    for cell in tqdm(cells, desc=f"Stiffness matrix  level={level}"):
+        qp, qw, area = _translate_points(pts_ref, cell, wts_ref)
+        active_bf    = T.spaces[level].get_functions_on_rectangle(cell)
+
+        for idx_i, i in enumerate(active_bf):
+            Bi      = T.spaces[level].construct_B_spline(i)
+            bi_grad = Bi.grad(qp)          # shape (Q, d)
+
+            for j in active_bf[idx_i:]:
+                Bj      = T.spaces[level].construct_B_spline(j)
+                bj_grad = Bj.grad(qp)      # shape (Q, d)
+                val     = integrate_grad(bi_grad, bj_grad, qw, area, cell.shape[0])
                 M[i, j] += val
-                if i == j:
-                    continue
-                M[j, i] += val
+                if i != j:
+                    M[j, i] += val
 
     return M
 
 
-def integrate(bi_values, bj_values, weights, area, dim):
-    I = 0
-    for i in range(len(bi_values)):
-        I += weights[i] * bi_values[i] * bj_values[i]
+# ---------------------------------------------------------------------------
+# Quadrature helper
+# ---------------------------------------------------------------------------
 
-    I *= area / 2 ** dim
+def _translate_points(
+    points: np.ndarray,
+    cell: np.ndarray,
+    weights: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """
+    Map 1-D Gauss points from the reference interval [-1, 1] to a d-dimensional
+    physical cell and form the tensor-product quadrature rule.
 
-    return I
+    The affine map in direction j is:
+        x_j = 0.5 * (ξ + 1) * (b_j − a_j) + a_j
 
+    The full d-D Jacobian is  area / 2^d.
 
-def integrate_smart(bi, bj, cell):
+    Parameters
+    ----------
+    points  : 1-D Gauss points on [-1, 1], shape (Q,)
+    cell    : physical cell, shape (d, 2), where cell[j] = [a_j, b_j]
+    weights : 1-D Gauss weights, shape (Q,)
+
+    Returns
+    -------
+    qp   : physical quadrature points,  shape (Q^d, d)
+    qw   : quadrature weights,           shape (Q^d,)
+    area : cell volume = ∏_j (b_j − a_j)
+    """
     dim = cell.shape[0]
 
-    if dim == 1:
-        return scipy.integrate.quad(lambda x: bi(x) * bj(x), cell[0, 0], cell[0, 1])[0]
-    elif dim == 2:
-        val, info = scipy.integrate.dblquad(lambda y, x: bi(np.array([x, y])) * bj(np.array([x, y])), cell[0, 0],
-                                            cell[0, 1],
-                                            lambda x: cell[1, 0], lambda x: cell[1, 1])
+    # Map reference points to physical coordinates per direction
+    phys_pts = np.array([
+        0.5 * (points + 1.0) * (cell[j, 1] - cell[j, 0]) + cell[j, 0]
+        for j in range(dim)
+    ])  # shape (d, Q)
+
+    # Tensor-product: all combinations of physical points
+    grids = np.stack(np.meshgrid(*phys_pts), -1).reshape(-1, dim)  # (Q^d, d)
+
+    # Tensor-product weights (reference interval; Jacobian applied below)
+    wt_grids = np.stack(np.meshgrid(*[weights] * dim), -1).reshape(-1, dim)
+    qw       = np.prod(wt_grids, axis=1)  # (Q^d,)
+
+    area = float(np.prod(cell[:, 1] - cell[:, 0]))  # physical cell volume
+
+    return grids, qw, area
