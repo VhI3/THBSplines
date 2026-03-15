@@ -79,7 +79,7 @@ class CartesianMesh(Mesh):
         if self.dim != 1:
             cells = np.swapaxes(cells, 1, 2)
 
-        return cells
+        return np.asarray(cells, dtype=np.float64)
 
     # Alias used by the rest of the package (old name)
     def compute_cells(self) -> np.ndarray:

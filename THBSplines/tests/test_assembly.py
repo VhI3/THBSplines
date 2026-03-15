@@ -224,8 +224,8 @@ def test_stiffness_matrix_subregion():
     a = hierarchical_stiffness_matrix(T).toarray().ravel()
     a_local = local_stiffness_matrix(T, level=0, element_indices=[0]).toarray().ravel()
 
-    assert np.all(np.in1d(m_local, m))
-    assert np.all(np.in1d(a_local, a))
+    assert np.all(np.isin(m_local, m))
+    assert np.all(np.isin(a_local, a))
 
     m = hierarchical_mass_matrix(T).toarray().ravel()
     m_local = local_mass_matrix(T, level=0, element_indices=[0]).toarray().ravel()
@@ -233,6 +233,5 @@ def test_stiffness_matrix_subregion():
     a = hierarchical_stiffness_matrix(T).toarray().ravel()
     a_local = local_stiffness_matrix(T, level=0, element_indices=[0]).toarray().ravel()
 
-    assert np.all(np.in1d(m_local, m))
-    assert np.all(np.in1d(a_local, a))
-
+    assert np.all(np.isin(m_local, m))
+    assert np.all(np.isin(a_local, a))

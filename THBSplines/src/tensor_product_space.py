@@ -421,11 +421,19 @@ class TensorProductSpace(Space):
         assert len(coefficients) == self.nfuncs, (
             f"Expected {self.nfuncs} coefficients, got {len(coefficients)}"
         )
-        def f(x: np.ndarray) -> float:
-            return sum(
-                c * self.construct_B_spline(i)(x)
-                for i, c in enumerate(coefficients)
-            )
+        def f(x: np.ndarray):
+            x = np.asarray(x, dtype=np.float64)
+            pointwise_input = x.ndim == 1
+            x_eval = x.reshape(1, -1) if pointwise_input else x
+
+            values = np.zeros(x_eval.shape[0], dtype=np.float64)
+            for i, c in enumerate(coefficients):
+                if c != 0:
+                    values += c * self.construct_B_spline(i)(x_eval)
+
+            if pointwise_input:
+                return float(values[0])
+            return values
         return f
 
 
