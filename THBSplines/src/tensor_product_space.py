@@ -9,7 +9,7 @@ tensor products of univariate B-spline basis functions:
 where each ``B_{i_j,p_j}`` is defined over a *local* knot vector of
 length ``p_j + 2`` extracted from the global knot vector in direction j.
 
-The total number of basis functions is ∏_j (n_j − p_j − 1), where n_j is
+The total number of basis functions is ∏_j (n_j - p_j - 1), where n_j is
 the length of the knot vector in direction j.
 
 Key responsibilities

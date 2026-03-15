@@ -25,10 +25,10 @@ Quadrature
 Gauss–Legendre quadrature with ``order`` points per direction is used.  If
 ``order`` is not specified, an exact rule is chosen: ``degree + 1`` points
 suffice for the mass matrix (integrand degree ≤ 2p) and the stiffness matrix
-(integrand degree ≤ 2p−2).
+(integrand degree ≤ 2p-2).
 
 The reference rule on [-1, 1] is mapped to each physical cell by the affine
-map  x = 0.5·(ξ+1)·(b−a) + a  with Jacobian (b−a)/2 per direction.
+map  x = 0.5·(ξ+1)·(b-a) + a  with Jacobian (b-a)/2 per direction.
 """
 
 from __future__ import annotations
@@ -269,7 +269,7 @@ def _translate_points(
     physical cell and form the tensor-product quadrature rule.
 
     The affine map in direction j is:
-        x_j = 0.5 * (ξ + 1) * (b_j − a_j) + a_j
+        x_j = 0.5 * (ξ + 1) * (b_j - a_j) + a_j
 
     The full d-D Jacobian is  area / 2^d.
 
@@ -283,7 +283,7 @@ def _translate_points(
     -------
     qp   : physical quadrature points,  shape (Q^d, d)
     qw   : quadrature weights,           shape (Q^d,)
-    area : cell volume = ∏_j (b_j − a_j)
+    area : cell volume = ∏_j (b_j - a_j)
     """
     dim = cell.shape[0]
 

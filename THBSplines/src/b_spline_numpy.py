@@ -2,7 +2,7 @@
 Pure NumPy/SciPy replacement for the Cython BSpline extension module.
 
 Provides the same public API that the rest of the package uses:
-  - BSpline         : univariate B-spline (vectorised evaluation + derivative)
+  - BSpline         : univariate B-spline (vectorized evaluation + derivative)
   - TensorProductBSpline : tensor-product B-spline in arbitrary dimension
   - integrate       : Gauss-quadrature inner product ∫ Bᵢ Bⱼ
   - integrate_grad  : Gauss-quadrature inner product ∫ ∇Bᵢ · ∇Bⱼ
@@ -12,12 +12,12 @@ Mathematical background
 A B-spline Bᵢ of degree p is defined by a *local* knot vector of length p+2:
     t = [t₀, t₁, …, t_{p+1}]
 Its support is [t₀, t_{p+1}].  The function is evaluated using the
-Cox–de Boor recursion:
+Cox-de Boor recursion:
 
     B(x; 0, [t_j, t_{j+1}]) = 1  if  t_j ≤ x < t_{j+1}  else  0
 
-    B(x; p, t) = (x − t₀)/(t_{p} − t₀) · B(x; p−1, t[:-1])
-               + (t_{p+1} − x)/(t_{p+1} − t₁) · B(x; p−1, t[1:])
+    B(x; p, t) = (x - t₀)/(t_{p} - t₀) · B(x; p-1, t[:-1])
+               + (t_{p+1} - x)/(t_{p+1} - t₁) · B(x; p-1, t[1:])
 
 with the convention 0/0 = 0.
 
@@ -64,14 +64,14 @@ def _eval_scalar(x: float, degree: int, knots: np.ndarray, end: int) -> float:
         return 1.0
 
     # --- Recursive step ---
-    left  = _eval_scalar(x, degree - 1, knots[:-1], end)
+    left = _eval_scalar(x, degree - 1, knots[:-1], end)
     right = _eval_scalar(x, degree - 1, knots[1:],  end)
 
-    denom_left  = knots[-2] - knots[0]   # t_{p} − t₀
-    denom_right = knots[-1] - knots[1]   # t_{p+1} − t₁
+    denom_left = knots[-2] - knots[0]   # t_{p} - t₀
+    denom_right = knots[-1] - knots[1]   # t_{p+1} - t₁
 
     if denom_left > 1e-14:
-        left  *= (x - knots[0]) / denom_left
+        left *= (x - knots[0]) / denom_left
     else:
         left = 0.0  # 0/0 convention
 
@@ -88,21 +88,21 @@ def _deriv_scalar(x: float, degree: int, knots: np.ndarray, end: int, r: int) ->
     Evaluate the r-th derivative of a B-spline at a single point.
 
     The derivative formula is:
-        D^r B(x; p, t) = p · [ D^{r-1} B(x; p-1, t[:-1]) / (t_p − t₀)
-                               − D^{r-1} B(x; p-1, t[1:]) / (t_{p+1} − t₁) ]
+        D^r B(x; p, t) = p · [ D^{r-1} B(x; p-1, t[:-1]) / (t_p - t₀)
+                               - D^{r-1} B(x; p-1, t[1:]) / (t_{p+1} - t₁) ]
 
     For r=1 the inner terms are evaluations (D^0), for r>1 they recurse.
     """
     n = len(knots)
-    denom_left  = knots[-2] - knots[0]
+    denom_left = knots[-2] - knots[0]
     denom_right = knots[-1] - knots[1]
 
     if r == 1:
         # Base of the derivative recursion: innermost terms are evaluations
-        left  = _eval_scalar(x, degree - 1, knots[:-1], end)
+        left = _eval_scalar(x, degree - 1, knots[:-1], end)
         right = _eval_scalar(x, degree - 1, knots[1:],  end)
     else:
-        left  = _deriv_scalar(x, degree - 1, knots[:-1], 0,   r - 1)
+        left = _deriv_scalar(x, degree - 1, knots[:-1], 0,   r - 1)
         right = _deriv_scalar(x, degree - 1, knots[1:],  end, r - 1)
 
     if denom_left > 1e-14:
@@ -138,8 +138,8 @@ class BSpline:
     """
 
     def __init__(self, degree: int, knots: np.ndarray, evaluate_end: int = 0):
-        self.degree       = degree
-        self.knots        = np.asarray(knots, dtype=np.float64)
+        self.degree = degree
+        self.knots = np.asarray(knots, dtype=np.float64)
         self.evaluate_end = int(evaluate_end)
 
     # ------------------------------------------------------------------
@@ -161,7 +161,8 @@ class BSpline:
         x = np.asarray(x, dtype=np.float64).ravel()
         result = np.empty(len(x), dtype=np.float64)
         for i, xi in enumerate(x):
-            result[i] = _eval_scalar(xi, self.degree, self.knots, self.evaluate_end)
+            result[i] = _eval_scalar(
+                xi, self.degree, self.knots, self.evaluate_end)
         return result
 
     # ------------------------------------------------------------------
@@ -184,7 +185,8 @@ class BSpline:
         x = np.asarray(x, dtype=np.float64).ravel()
         result = np.empty(len(x), dtype=np.float64)
         for i, xi in enumerate(x):
-            result[i] = _deriv_scalar(xi, self.degree, self.knots, self.evaluate_end, r)
+            result[i] = _deriv_scalar(
+                xi, self.degree, self.knots, self.evaluate_end, r)
         return result
 
     # ------------------------------------------------------------------
@@ -225,9 +227,9 @@ class TensorProductBSpline:
         knots: np.ndarray,
         end_evaluation: np.ndarray | None = None,
     ):
-        self.degrees             = np.asarray(degrees, dtype=int)
+        self.degrees = np.asarray(degrees, dtype=int)
         self.parametric_dimension = int(len(self.degrees))
-        knots                    = np.asarray(knots, dtype=np.float64)
+        knots = np.asarray(knots, dtype=np.float64)
 
         if end_evaluation is None:
             end_evaluation = np.zeros(self.parametric_dimension, dtype=int)
@@ -235,7 +237,8 @@ class TensorProductBSpline:
 
         # Build one univariate BSpline per direction
         self.univariate_b_splines: list[BSpline] = [
-            BSpline(int(self.degrees[i]), knots[i], int(self.end_evaluation[i]))
+            BSpline(int(self.degrees[i]), knots[i],
+                    int(self.end_evaluation[i]))
             for i in range(self.parametric_dimension)
         ]
 
@@ -256,7 +259,8 @@ class TensorProductBSpline:
         np.ndarray, shape (N,)
             B(x₁, …, x_d) = B₁(x₁) · B₂(x₂) · … · B_d(x_d)
         """
-        x = np.asarray(x, dtype=np.float64).reshape(-1, self.parametric_dimension)
+        x = np.asarray(x, dtype=np.float64).reshape(-1,
+                                                    self.parametric_dimension)
         n = x.shape[0]
 
         # Evaluate each univariate factor independently, then multiply
@@ -287,15 +291,16 @@ class TensorProductBSpline:
         -------
         np.ndarray, shape (N, d)
         """
-        x = np.asarray(x, dtype=np.float64).reshape(-1, self.parametric_dimension)
+        x = np.asarray(x, dtype=np.float64).reshape(-1,
+                                                    self.parametric_dimension)
         n = x.shape[0]
         d = self.parametric_dimension
 
         # Pre-compute function values and first derivatives for each direction
-        vals  = np.zeros((n, d), dtype=np.float64)  # Bⱼ(xⱼ)
+        vals = np.zeros((n, d), dtype=np.float64)  # Bⱼ(xⱼ)
         grads = np.zeros((n, d), dtype=np.float64)  # B'ⱼ(xⱼ)
         for j in range(d):
-            vals[:, j]  = self.univariate_b_splines[j](x[:, j])
+            vals[:, j] = self.univariate_b_splines[j](x[:, j])
             grads[:, j] = self.univariate_b_splines[j].D(x[:, j], 1)
 
         # Gradient component j = derivative in j × product of values in all other dirs
