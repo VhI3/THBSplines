@@ -1,0 +1,77 @@
+# ── Virtual environment ────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Python build & packaging ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+wheels/
+*.whl
+MANIFEST
+
+# ── Cython (legacy — no longer used) ──────────────────────────────────────────
+*.c           # generated C source from .pyx
+*.html        # Cython annotation files
+src_c/*.c
+src_c/*.html
+
+# ── Jupyter notebooks ─────────────────────────────────────────────────────────
+# Keep .ipynb files but ignore checkpoint folders and outputs
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# ── Testing & coverage ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.coveragerc
+
+# ── IDEs & editors ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS artefacts ──────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+desktop.ini
+
+# ── Logs & temporary files ────────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+*.orig
+
+# ── Profiling ─────────────────────────────────────────────────────────────────
+*.prof
+*.lprof
+
+# ── Matplotlib figure cache ───────────────────────────────────────────────────
+*.png
+*.pdf
+*.eps
+*.svg
+# (keep images/ that are explicitly tracked for the README)
+!THBSplines/images/
+
+# ── NumPy / SciPy binary dumps ────────────────────────────────────────────────
+*.npy
+*.npz
+
+# ── Scratchpad / personal notes ───────────────────────────────────────────────
+THBSplines/scratchpad/
+scratch/

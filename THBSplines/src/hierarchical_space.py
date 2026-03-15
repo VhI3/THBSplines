@@ -311,12 +311,14 @@ class HierarchicalSpace(Space):
         dfunc = self.dfunc_level
 
         for level in range(self.nlevels - 1):
+            marked_at_level = marked_entities.get(level, np.array([], dtype=np.int64))
+
             # --- Step 1 & 2: deactivate marked functions ---
-            afunc[level] = np.setdiff1d(afunc[level], marked_entities[level]).astype(np.int64)
-            dfunc[level] = np.union1d(marked_entities[level], dfunc[level]).astype(np.int64)
+            afunc[level] = np.setdiff1d(afunc[level], marked_at_level).astype(np.int64)
+            dfunc[level] = np.union1d(marked_at_level, dfunc[level]).astype(np.int64)
 
             # --- Step 3: find children (fine functions that overlap the coarse support) ---
-            children = self._get_children(level, marked_entities[level])
+            children = self._get_children(level, marked_at_level)
 
             # Activate children not yet active or deactivated at the next level
             already_present = np.union1d(afunc[level + 1], dfunc[level + 1])
@@ -326,7 +328,8 @@ class HierarchicalSpace(Space):
             # --- Step 5: activate additional functions at level+1 with full coverage ---
             # A function at level+1 can be activated if all cells in its support
             # are either active or deactivated (i.e. the support is "covered").
-            candidate_funcs = self.spaces[level + 1].get_basis_functions(new_cells[level + 1])
+            new_at_next = new_cells.get(level + 1, np.array([], dtype=np.int64))
+            candidate_funcs = self.spaces[level + 1].get_basis_functions(new_at_next)
             candidate_funcs = np.setdiff1d(candidate_funcs, afunc[level + 1])
 
             _, func_cells_map = self.spaces[level + 1].get_cells(candidate_funcs)
@@ -418,6 +421,11 @@ class HierarchicalSpace(Space):
         marked_functions: dict[int, np.ndarray] = {}
 
         for level in range(self.nlevels):
+            # Skip levels that have no marked cells
+            if level not in marked_cells or len(marked_cells[level]) == 0:
+                marked_functions[level] = np.array([], dtype=np.int64)
+                continue
+
             # Functions in the support of any marked cell
             candidates = self.spaces[level].get_basis_functions(marked_cells[level])
             # Keep only currently active functions
