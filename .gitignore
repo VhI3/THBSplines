@@ -49,6 +49,7 @@ Thumbs.db
 .AppleDouble
 .LSOverride
 desktop.ini
+.directory          # KDE Dolphin view settings
 
 # ── Logs & temporary files ────────────────────────────────────────────────────
 *.log
