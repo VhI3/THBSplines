@@ -66,7 +66,7 @@ jupyter lab notebooks/THBSplines_tutorial.ipynb
 
 ## Gallery
 
-### 1 -- B-spline basis functions
+### 1.  B-spline basis functions
 
 Six quadratic basis functions on `[0, 4]` with a clamped knot vector, and their sum (partition of unity).
 
@@ -74,7 +74,7 @@ Six quadratic basis functions on `[0, 4]` with a clamped knot vector, and their 
 
 ---
 
-### 2 -- Adaptive hierarchical mesh
+### 2.  Adaptive hierarchical mesh
 
 Two rounds of local dyadic refinement applied to the lower-left region of a biquadratic mesh.
 
@@ -91,7 +91,7 @@ Each function has compact support that is smaller than or equal to the correspon
 
 ---
 
-### 4 -- Mass and stiffness matrix sparsity
+### 4.  Mass and stiffness matrix sparsity
 
 Sparsity patterns of the assembled mass matrix **M** and stiffness matrix **A**
 on an adaptively refined biquadratic space.
@@ -100,9 +100,9 @@ on an adaptively refined biquadratic space.
 
 ---
 
-### 5 -- Poisson equation solved with THB-splines
+### 5. Poisson equation solved with THB-splines
 
-The Poisson problem -Delta u = f on [0,1]^2 with exact solution u = sin(pi*x)sin(pi*y),
+The Poisson problem $\Delta u = f$  on $[0,1]^2$ with exact solution $u = sin(\pi x)sin(\pi  y)$,
 solved by a Galerkin THB-spline method on an adaptively refined mesh.
 
 ![Poisson solution: exact, FEM, and pointwise error](THBSplines/images/poisson_solution.png)

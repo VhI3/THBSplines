@@ -99,13 +99,13 @@ for i in range(n_basis):
     total += yi
     axes[0].plot(x, yi, lw=2.0, color=LINE[i % len(LINE)], label=rf"$B_{{{i},{degree}}}$")
 
-style(axes[0], xlabel="Parameter $x$", ylabel="$B(x)$", title="Quadratic B-spline Basis Functions")
+style(axes[0], xlabel="Knot vector $x$", ylabel="$B(x)$", title="Quadratic B-spline Basis Functions")
 axes[0].set_xlim(0, 4); axes[0].set_ylim(-0.03, 1.08)
-axes[0].legend(ncol=3, loc="upper center", bbox_to_anchor=(0.5, 1.20))
+axes[0].legend(ncol=4, loc="best", bbox_to_anchor=(0.5, 1.20))
 
 axes[1].plot(x, total, lw=2.6, color=LINE[0], label=r"$\sum_i B_i(x)$")
 axes[1].axhline(1, color=LINE[4], ls="--", lw=1.3, label="$y = 1$")
-style(axes[1], xlabel="Parameter $x$", ylabel="Basis sum", title="Partition of Unity")
+style(axes[1], xlabel="Knot vector $x$", ylabel="Basis sum", title="Partition of Unity")
 axes[1].set_xlim(0, 4); axes[1].set_ylim(0.93, 1.07)
 axes[1].legend(loc="lower right")
 
@@ -216,25 +216,20 @@ B_q = evaluate_hierarchical_basis(Tp, pts_q)
 f_vals_q = 2 * np.pi**2 * np.sin(np.pi * pts_q[:, 0]) * np.sin(np.pi * pts_q[:, 1])
 f_h = (1.0 / n_q**2) * (B_q.T @ f_vals_q)
 
-# Boundary DOFs (support touches x/y = 0 or 1)
-cumulative = 0
-is_interior = np.zeros(Tp.nfuncs, dtype=bool)
-eps = 1e-12
-for lev in range(Tp.nlevels):
-    active = Tp.afunc_level[lev]
-    supp = Tp.spaces[lev].basis_supports[active]   # (n, 2, 2)
-    on_bd = (
-        (supp[:, 0, 0] < eps) | (supp[:, 0, 1] > 1 - eps) |
-        (supp[:, 1, 0] < eps) | (supp[:, 1, 1] > 1 - eps)
-    )
-    n_lev = Tp.nfuncs_level[lev]
-    is_interior[cumulative: cumulative + n_lev] = ~on_bd
-    cumulative += n_lev
-
-interior = np.where(is_interior)[0]
-if len(interior) == 0:
-    # fallback: keep all DOFs (clamped ends already zero)
-    interior = np.arange(Tp.nfuncs)
+# Boundary DOFs: a basis function is a boundary DOF if it is nonzero
+# on any of the four edges x=0, x=1, y=0, y=1.
+# We sample each edge and check which columns of the basis matrix are nonzero.
+n_edge = 30
+t_edge = np.linspace(0, 1, n_edge)
+edge_pts = np.vstack([
+    np.column_stack([np.zeros(n_edge), t_edge]),   # x = 0
+    np.column_stack([np.ones(n_edge),  t_edge]),   # x = 1
+    np.column_stack([t_edge, np.zeros(n_edge)]),   # y = 0
+    np.column_stack([t_edge, np.ones(n_edge)]),    # y = 1
+])
+B_edge = evaluate_hierarchical_basis(Tp, edge_pts)
+on_boundary = np.any(B_edge > 1e-12, axis=0)      # shape (nfuncs,)
+interior = np.where(~on_boundary)[0]
 
 Ap_csr = Ap.tocsr()
 A_int  = Ap_csr[np.ix_(interior, interior)]
@@ -255,6 +250,8 @@ err     = np.abs(u_h - u_exact)
 
 lvls_u = np.linspace(0, u_exact.max(), 18)
 lvls_e = np.linspace(0, err.max() + 1e-12, 18)
+
+print(max(u_exact.ravel()), max(u_h.ravel()), max(err.ravel()))
 
 def cfill(fig, ax, X, Y, Z, levels, cmap, title, clabel):
     cf = ax.contourf(X, Y, Z, levels=levels, cmap=cmap)
