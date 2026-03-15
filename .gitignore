@@ -69,6 +69,7 @@ desktop.ini
 *.svg
 # (keep images/ that are explicitly tracked for the README)
 !THBSplines/images/
+!THBSplines/images/*.png
 
 # ── NumPy / SciPy binary dumps ────────────────────────────────────────────────
 *.npy
