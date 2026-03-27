@@ -78,8 +78,26 @@ class TestRefinement:
         space = make_biquadratic()
         # Insert a partial vertical line that only spans part of the domain
         ln = MeshLine(axis=0, value=0.5, start=0.0, end=2.0)
-        refine(space, ln)
+        with pytest.warns(UserWarning, match="LLI violated after partial line insertion"):
+            refine(space, ln)
         assert space.check_partition_of_unity()
+
+    def test_partial_line_warns_when_lli_is_violated(self):
+        space = make_biquadratic()
+        ln = MeshLine(axis=0, value=0.5, start=0.0, end=2.0)
+
+        with pytest.warns(UserWarning, match="LLI violated after partial line insertion"):
+            refine(space, ln)
+
+        assert not check_lli(space)
+
+    def test_full_line_after_partial_refinement_raises(self):
+        space = make_biquadratic()
+        with pytest.warns(UserWarning, match="LLI violated after partial line insertion"):
+            refine(space, MeshLine(axis=0, value=0.5, start=0.0, end=2.0))
+
+        with pytest.raises(RuntimeError, match="cannot be called after partial"):
+            refine(space, MeshLine(axis=1, value=1.5, start=0.0, end=3.0))
 
     def test_nfuncs_monotone(self):
         """Each refinement should not decrease nfuncs."""
