@@ -200,36 +200,54 @@ print("5/5  Poisson solution …")
 import scipy.sparse.linalg as spla
 
 # Space on [0,1]²
-knots_p = [[0,0,0,0.5,1,1,1], [0,0,0,0.5,1,1,1]]
+knots_p = [[0,0,0,0.25,0.5,0.75,1,1,1], [0,0,0,0.25,0.5,0.75,1,1,1]]
 Tp = HierarchicalSpace(knots_p, [2, 2], dim=2)
 rect_p = np.array([[0.25, 0.75], [0.25, 0.75]])
 with contextlib.redirect_stderr(io.StringIO()):
     Tp = refine(Tp, {0: Tp.refine_in_rectangle(rect_p, 0)})
     Ap = hierarchical_stiffness_matrix(Tp)
 
-# Load vector via quadrature
-n_q = 12
-x_q = np.linspace(0.01, 0.99, n_q)
-Xq, Yq = np.meshgrid(x_q, x_q)
-pts_q = np.column_stack([Xq.ravel(), Yq.ravel()])
-B_q = evaluate_hierarchical_basis(Tp, pts_q)
-f_vals_q = 2 * np.pi**2 * np.sin(np.pi * pts_q[:, 0]) * np.sin(np.pi * pts_q[:, 1])
-f_h = (1.0 / n_q**2) * (B_q.T @ f_vals_q)
+# Load vector via element-wise Gauss quadrature over active hierarchical cells
+def _thb_load_vector(T, f_rhs, order=5):
+    pts_1d, w_1d = np.polynomial.legendre.leggauss(order)
+    fv = np.zeros(T.nfuncs)
+    for lev in range(T.nlevels):
+        cells = T.mesh.meshes[lev].cells[T.mesh.aelem_level[lev]]
+        for cell in cells:
+            u0c, u1c = cell[0, 0], cell[0, 1]
+            v0c, v1c = cell[1, 0], cell[1, 1]
+            up = 0.5*(u1c-u0c)*pts_1d + 0.5*(u0c+u1c)
+            vp = 0.5*(v1c-v0c)*pts_1d + 0.5*(v0c+v1c)
+            U, V = np.meshgrid(up, vp)
+            pts = np.column_stack([U.ravel(), V.ravel()])
+            Wu, Wv = np.meshgrid(w_1d, w_1d)
+            w = (Wu * Wv).ravel() * 0.25*(u1c-u0c)*(v1c-v0c)
+            B = evaluate_hierarchical_basis(T, pts)
+            fv += B.T @ (w * f_rhs(pts))
+    return fv
 
-# Boundary DOFs: a basis function is a boundary DOF if it is nonzero
-# on any of the four edges x=0, x=1, y=0, y=1.
-# We sample each edge and check which columns of the basis matrix are nonzero.
-n_edge = 30
-t_edge = np.linspace(0, 1, n_edge)
-edge_pts = np.vstack([
-    np.column_stack([np.zeros(n_edge), t_edge]),   # x = 0
-    np.column_stack([np.ones(n_edge),  t_edge]),   # x = 1
-    np.column_stack([t_edge, np.zeros(n_edge)]),   # y = 0
-    np.column_stack([t_edge, np.ones(n_edge)]),    # y = 1
-])
-B_edge = evaluate_hierarchical_basis(Tp, edge_pts)
-on_boundary = np.any(B_edge > 1e-12, axis=0)      # shape (nfuncs,)
-interior = np.where(~on_boundary)[0]
+f_rhs = lambda pts: 2*np.pi**2 * np.sin(np.pi*pts[:,0]) * np.sin(np.pi*pts[:,1])
+f_h = _thb_load_vector(Tp, f_rhs, order=5)
+
+# Interior DOFs via Greville abscissae (support bbox fails for clamped B-splines)
+eps = 1e-12
+is_interior = np.zeros(Tp.nfuncs, dtype=bool)
+cumulative = 0
+for lev in range(Tp.nlevels):
+    sp = Tp.spaces[lev]
+    kx, ky = sp.knots[0], sp.knots[1]
+    p = sp.degrees[0]
+    nx, ny = sp.nfuncs_onedim
+    gx = np.array([np.mean(kx[i+1:i+p+1]) for i in range(nx)])
+    gy = np.array([np.mean(ky[j+1:j+p+1]) for j in range(ny)])
+    active = Tp.afunc_level[lev]
+    n_lev = Tp.nfuncs_level[lev]
+    for local_idx, k in enumerate(active):
+        i, j = k // ny, k % ny
+        if gx[i] > eps and gx[i] < 1-eps and gy[j] > eps and gy[j] < 1-eps:
+            is_interior[cumulative + local_idx] = True
+    cumulative += n_lev
+interior = np.where(is_interior)[0]
 
 Ap_csr = Ap.tocsr()
 A_int  = Ap_csr[np.ix_(interior, interior)]

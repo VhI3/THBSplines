@@ -179,6 +179,12 @@ class LRSplineSpace:
         # Build mesh from unique breakpoints
         self._mesh = LRMesh(self._global_knots_u, self._global_knots_v)
 
+        # Flag: True once a partial (T-junction) line has been inserted.
+        # A full-line insertion after partial ones would silently destroy the
+        # T-junction structure by rebuilding the basis from the global knot
+        # vectors (which do not record partial lines).
+        self._has_partial_refinements: bool = False
+
         # Build the tensor-product basis
         self._basis: List[LRBasisFunction] = []
         self._build_tensor_basis()
@@ -260,6 +266,15 @@ class LRSplineSpace:
                 1 = horizontal line (insert into v-knot vector)
         value : the knot value to insert
         """
+        if self._has_partial_refinements:
+            raise RuntimeError(
+                "refine_full_line() cannot be called after partial (T-junction) "
+                "line insertions: rebuilding the tensor-product basis would "
+                "silently discard all earlier local refinements.  "
+                "Use refine_line() with a full-span MeshLine instead, or "
+                "start from a fresh LRSplineSpace."
+            )
+
         if axis == 0:
             T_new, alpha = _refine_knot_vector(
                 self._global_knots_u, self._degree_u, value)
@@ -328,6 +343,7 @@ class LRSplineSpace:
         self._mesh.insert_line(line)
         self._reassign_ids()
         self._update_element_supports()
+        self._has_partial_refinements = True
 
     # ------------------------------------------------------------------
     # Element-support mapping

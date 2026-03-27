@@ -25,15 +25,14 @@ space V' is obtained by:
 
 Local Linear Independence (LLI)
 ---------------------------------
-After inserting a line, the LLI condition may be violated on some element:
-it requires that the number of basis functions with support on an element
-does not exceed (p_u + 1) * (p_v + 1).
+After inserting a partial line, the LLI condition may be violated on some
+element: it requires that the number of basis functions with support on an
+element does not exceed (p_u + 1) * (p_v + 1).
 
-If a violation occurs, additional lines must be automatically extended
-(the "safe" algorithm) or the user must choose a compatible refinement
-strategy.  For the current implementation we enforce LLI by a greedy
-extension: if an element is overloaded after insertion, we extend the
-inserted line through that element's support until LLI is satisfied.
+**WARNING**: This implementation does NOT automatically enforce LLI.
+After a partial insertion, ``check_lli`` should be called to verify the
+condition.  If it fails, the user must choose a compatible refinement
+strategy (e.g. extend lines manually or use only full-line insertions).
 
 Reference:  Bressan & Jüttler (2018) "Inf-sup stable finite element
 pairs of arbitrary order on structured meshes", IMA J. Numer. Anal.
@@ -41,6 +40,7 @@ pairs of arbitrary order on structured meshes", IMA J. Numer. Anal.
 
 from __future__ import annotations
 
+import warnings
 import numpy as np
 from typing import TYPE_CHECKING, List
 
@@ -71,6 +71,15 @@ def refine(space: 'LRSplineSpace', line: MeshLine) -> None:
         The knot line segment to insert.
     """
     space.refine_line(line)
+
+    # Warn if the insertion produced a space that violates LLI.
+    if not check_lli(space):
+        warnings.warn(
+            "LLI violated after partial line insertion.  "
+            "Call check_lli(space) / lli_report(space) for details.  "
+            "Consider extending lines manually to restore LLI.",
+            stacklevel=2,
+        )
 
 
 def refine_region(space: 'LRSplineSpace',
