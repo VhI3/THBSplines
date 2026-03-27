@@ -1,4 +1,4 @@
-# SplineLab
+# Splinery
 
 A pure **NumPy/SciPy** Python workbench for studying, implementing, and comparing
 spline technologies developed in the **Isogeometric Analysis (IGA)** era (post-2005).
