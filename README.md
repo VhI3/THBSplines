@@ -20,6 +20,7 @@ methods can be compared fairly.
 |---|---|---|
 | **THB-Splines** (Truncated Hierarchical B-Splines) | ✅ complete | Partition of unity, adaptive refinement, Poisson FEM |
 | **LR-Splines** (Locally Refined B-Splines) | ✅ complete | Overloading algorithm, T-junctions, Poisson FEM |
+| **HB-Splines** (Hierarchical B-Splines) | ✅ complete | 1D adaptive FEM, residual estimator, Dorfler/max marking, AFEM loop |
 
 ### Planned
 
@@ -27,7 +28,7 @@ methods can be compared fairly.
 
 | Method | Description |
 |---|---|
-| **HB-Splines** | Non-truncated hierarchical B-splines; predecessor to THB-Splines |
+| **HB-Splines** | 2D extension and comparison with THB-Splines |
 | **PHT-Splines** | Polynomial splines over hierarchical T-meshes; fast conversion from NURBS |
 | **RHT-Splines** | Rational extension of PHT-Splines for 3D elasto-statics/dynamics |
 | **TDHB-Splines** | Truncated decoupled hierarchical B-splines; decoupled basis variant |
@@ -75,6 +76,20 @@ guarantees partition of unity, linear independence, and sparsity.
 
 Reference: [Giannelli et al. (2012)](https://doi.org/10.1016/j.cma.2012.04.027),
 implementation following [Bracco et al. (2017)](https://doi.org/10.1016/j.apnum.2017.08.006).
+
+### HB-Splines
+
+Hierarchical B-splines organize basis functions into levels via dyadic refinement, deactivating
+coarser functions and activating their children when a region is refined.  Unlike THB-splines,
+HB-splines are **not truncated**, so they do not form a partition of unity after adaptive
+refinement — this is the key limitation that THB-splines fix.
+
+This implementation solves 1D advection-diffusion problems
+$-m u'' + b u' = f$ with Dirichlet BCs, using the full **AFEM loop**:
+Solve → Estimate (cell-wise residual $\eta_j = h_j \|r_h\|_{L^2}$) → Mark (Dorfler or max) → Refine.
+
+Reference: [Höllig, *Finite Element Methods with B-Splines*, SIAM 2003](https://doi.org/10.1137/1.9780898717594),
+MATLAB source: [arielsboiardi/adAHBsplineFEM](https://github.com/arielsboiardi/adAHBsplineFEM).
 
 ### LR-Splines
 

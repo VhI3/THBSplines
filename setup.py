@@ -11,8 +11,8 @@ Install with:
 from setuptools import setup, find_packages
 
 setup(
-    name="THBSplines",
-    version="0.2.0",
+    name="Splinery",
+    version="0.3.0",
     packages=find_packages(),
     python_requires=">=3.10",
     install_requires=[
@@ -27,8 +27,8 @@ setup(
     },
     author="Ivar Stangeby",
     description=(
-        "Truncated Hierarchical B-splines: adaptive refinement for "
-        "isogeometric analysis, in pure Python."
+        "Splinery: a Python workbench for studying and comparing IGA spline "
+        "technologies — THB-splines, HB-splines, LR B-splines, and more."
     ),
     url="https://github.com/IvarStangeby/THBSplines",
     license="MIT",
